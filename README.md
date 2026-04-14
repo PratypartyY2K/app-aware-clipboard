@@ -1,222 +1,229 @@
-# App-Aware Clipboard Manager
+# Copy Paste Tool
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE) [![CI](https://github.com/PratypartyY2K/copy-paste-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/PratypartyY2K/copy-paste-tool/actions) [![Codecov](https://codecov.io/gh/PratypartyY2K/copy-paste-tool/branch/main/graph/badge.svg)](https://codecov.io/gh/PratypartyY2K/copy-paste-tool)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![CI](https://github.com/PratypartyY2K/copy-paste-tool/actions/workflows/ci.yml/badge.svg)](https://github.com/PratypartyY2K/copy-paste-tool/actions)
+[![Codecov](https://codecov.io/gh/PratypartyY2K/copy-paste-tool/branch/main/graph/badge.svg)](https://codecov.io/gh/PratypartyY2K/copy-paste-tool)
 
-A lightweight, macOS-focused clipboard manager built with PyQt6. It captures text copies, attributes them to the source application, and presents an app-aware UI with developer-friendly utilities.
+Your clipboard remembers one thing.
+Copy something else, and the last thing is gone.
 
-This README covers: installation, key features (Secret-safe mode, Pins, Search, Clip Actions), usage, configuration, developer notes, and troubleshooting.
+Clipboard managers fix that, but many treat the problem like a UI exercise. This project treats it like a systems problem: capture reliably, attribute clips to the right app, avoid duplicate feedback loops, and handle sensitive content conservatively.
 
----
+**Copy Paste Tool** is a privacy-first, app-aware clipboard manager for macOS built with PyQt6. It is designed around correctness, low-overhead event handling, and real-world failure modes rather than feature bloat.
 
-## Table of Contents
-- [Project Overview](#project-overview)
-- [Features](#features)
-- [Quick Start (macOS)](#quick-start-macos)
-- [UI Walkthrough](#ui-walkthrough)
-- [Data migration](#data-migration-if-you-upgraded-from-an-older-version)
-- [Security & Privacy](#security--privacy)
-- [Configuration and Settings](#configuration-and-settings)
-- [Developer Notes & Architecture](#developer-notes--architecture)
-- [CI and Testing](#ci-and-testing)
-- [Troubleshooting](#troubleshooting)
-- [Building a macOS app and DMG](#building-a-macos-app-and-dmg)
+## Why This Exists
 
----
+This project started from a simple product need, but the interesting part is not "store copied text in a list." The hard part is making clipboard history behave predictably on an actual desktop:
 
-## Project Overview
+- Clipboard updates can be triggered by the app itself, causing feedback loops.
+- App attribution on macOS is imperfect and permission-sensitive.
+- Sensitive content should not be treated like normal text.
+- GUI-heavy apps are easy to demo badly and harder to test well.
+- Extra features become noise if they reduce correctness.
 
-This tool watches the macOS clipboard and records copied text together with metadata: source application and capture timestamp. The design separates capture, storage/deduplication, and UI so functionality can be extended safely and tested.
+The result is a small desktop app with a stronger engineering focus than most clipboard projects.
 
-### Design Goals
-- **Correctness**: avoid re-capturing programmatic copies and attribute the frontmost application at capture time.
-- **Efficiency**: use Qt clipboard signals (no polling) for accuracy and low CPU usage.
-- **Security-aware**: provide a Secret-safe mode that avoids storing sensitive content from password/auth apps and token-like clipboard contents.
-- **Productivity features**: search, pins, and developer-friendly clip actions.
+## What Makes It Different
 
+- **Event-driven clipboard capture**: uses Qt clipboard signals for clipboard changes instead of polling, which keeps CPU usage low and behavior responsive.
+- **App-aware history**: each clip is attributed to the frontmost source app at capture time using macOS-focused attribution heuristics.
+- **Privacy-first defaults**: Secret-safe mode is enabled by default, with app blocklists and token/JWT heuristics for sensitive content.
+- **Correctness protections**: watcher pause logic prevents programmatic copy actions from being re-captured as new history entries.
+- **Deterministic UI actions**: list rows carry stable item IDs so context-menu actions target the intended record even if history updates mid-interaction.
+- **Testable architecture**: capture, history, persistence, and UI are separated into distinct modules with CI and coverage reporting.
+- **Scope discipline**: the earlier Boards feature was intentionally deprecated because it added ambiguity and misclassification without enough reliability.
+
+## Project Snapshot
+
+- **Platform**: macOS-first
+- **Language**: Python 3.11
+- **GUI**: PyQt6
+- **Persistence**: SQLite with WAL mode
+- **Testing**: pytest, pytest-qt, coverage, GitHub Actions, Codecov
+
+## Demo
+
+Screenshots and a short GIF are the next README upgrade. The current repo is stronger technically than it is visually documented, so this section is intentionally called out as missing rather than ignored.
 
 ## Features
 
-### Boards (deprecated and archived)
-- NOTE: the earlier "Boards" auto-routing feature (Links, Code, Commands, Notes, Other) is deprecated and no longer used by the running application or by default persistence. The DB column that previously contained board values can be removed with the migration helper (see "Data migration" below).
+### Core workflow
 
-The legacy routing implementation is preserved for reference in `archive/boards_reference.py` if you wish to inspect or re-enable it. Keeping an archived copy lets you re-introduce a rules-based router safely in the future without relying on the deprecated on-disk `board` column.
+- Capture copied text into per-app history.
+- Filter history by source application.
+- Search within the currently selected app history.
+- Re-copy any saved item from the UI.
 
-> Why removed: boards were causing persistent misclassification and added complexity. The core manager still supports app attribution, pins, search, and clip actions.
+### Privacy and safety
 
-### Secret-safe mode (trust)
-- Blocklisted apps (password managers, authenticators, Keychain entries) are not stored when Secret-safe mode is enabled.
-- Token/JWT heuristics: if clipboard content looks like a token (JWT or long base64-like string) it will be stored only temporarily and auto-removed after a configurable timeout.
-- The Secret-safe toggle and blocklist editor are available in the UI.
+- **Secret-safe mode** blocks capture from common password-manager and authenticator apps.
+- **Token heuristics** detect JWTs and long token-like strings, then mark them temporary and auto-remove them after a configurable timeout.
+- **Persistence is opt-in**. By default, the app runs in memory unless you explicitly configure a SQLite database path.
+- **Per-app capture control** lets you disable capture for a selected app without changing the global blocklist.
 
-### Pins
-- Pin frequently used items; pinned items stay at the top of the list for the source app.
-- Pin/Unpin is available from the context menu.
+### Productivity
 
-### Search
-- A search box filters the visible history for the currently selected app.
-- The window can be shown & search focused via an in-app hotkey (default: Ctrl+`). Note: this is an in-app hotkey, not a global system hotkey.
-
-### Clip Actions (developer-friendly)
-- Right-click an item to run transformations before copying to clipboard:
+- Pin frequently used items so they stay at the top of their app history.
+- Use clip actions from the context menu:
   - Trim whitespace
-  - Copy as one-line
+  - Copy as one line
   - Extract URLs
-  - JSON-escape (produce a JSON quoted/escaped string)
-  - Convert to camelCase / snake_case
+  - JSON-escape text
+  - Convert to `camelCase`
+  - Convert to `snake_case`
 
-### Stable IDs & safe context menu actions
-- The UI stores a stable `ClipboardItem.id` in each list row (UserRole) so context menu actions operate on the intended record even if the history updates while the menu is open.
+## Architecture
 
+The codebase is intentionally split so the risky parts stay isolated and testable.
 
-## Quick Start (macOS)
+- `clipboard_manager/watcher.py`
+  Clipboard event handling, pause/resume logic, source-app attribution, and capture signaling.
+- `clipboard_manager/history.py`
+  Dedupe, blocklist enforcement, temporary secret cleanup, pinning, and in-memory item management.
+- `clipboard_manager/storage.py`
+  Optional SQLite persistence and settings storage.
+- `clipboard_manager/gui.py`
+  Main window, filtering, search, and context-menu actions.
+- `clipboard_manager/clipboard_item.py`
+  Item model with stable IDs and metadata.
+
+## Why This Is Hard
+
+This is the section I would talk through in an interview, because these are the parts that make the project more than CRUD with a GUI.
+
+- **Clipboard feedback loops**: copying from the app back into the system clipboard can accidentally create duplicate captures unless the watcher is paused carefully.
+- **Source attribution**: identifying the real originating app on macOS depends on permissions, timing, and heuristics. The repo includes tunable attribution windows for debugging and calibration.
+- **Secret handling**: once you decide privacy matters, "store everything forever" stops being acceptable. Secret-safe mode changes both app filtering and token retention behavior.
+- **Concurrency and persistence**: history updates, cleanup of temporary items, and SQLite persistence need to coexist without corrupting state or making the UI unpredictable.
+- **GUI testing in CI**: desktop apps are easy to leave untested. This repo includes automated tests and headless CI coverage instead of relying only on manual verification.
+
+## Design Decisions
+
+### Boards were removed on purpose
+
+An earlier version included automatic Boards such as Links, Code, Commands, Notes, and Other. That feature is now deprecated and archived.
+
+It was removed because it introduced unreliable classification and ambiguity in real-world usage. Keeping it would have made the app look more feature-rich while making behavior less trustworthy. Removing it was a deliberate choice to prioritize correctness over feature bloat.
+
+The archived reference implementation remains in `archive/boards_reference.py` for future experimentation, but it is not part of the active runtime path.
+
+## Quick Start
 
 ### Prerequisites
-- Python 3.11 (the codebase was developed and tested with Python 3.11 on macOS; newer 3.x versions should work but use caution)
-- A Python virtual environment is recommended
-- PyQt6 installed in the environment
 
-### Create and activate a venv, then install PyQt6:
+- macOS
+- Python 3.11
+- A virtual environment is recommended
+
+### Install
 
 ```bash
-# from project root
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install PyQt6
 ```
 
-### Run the GUI app:
+If you want the stronger macOS attribution path backed by PyObjC, install the macOS extras used by the project as well:
 
 ```bash
-# from project root, with venv active
+python -m pip install pyobjc-framework-ApplicationServices
+```
+
+### Run
+
+```bash
 python clipboard_manager/main.py
 ```
 
-If you have an existing `.venv` in the repo, run the app using its Python binary:
+If you already have a repo-local environment:
 
 ```bash
 .venv/bin/python clipboard_manager/main.py
 ```
 
+### Current install status
 
-## UI Walkthrough
+This is currently a **developer-focused install**. Packaged standalone macOS distribution is still in progress, and this README does not pretend otherwise.
+
+## Usage
 
 ### Main controls
-- **Pause (ms)**: when the app programmatically copies text back to the clipboard, the watcher pauses capture for this duration (default 300 ms in the UI) to avoid re-capturing the same content.
-- **App dropdown**: filter history by the source application. When no app is selected, the list is empty.
-- **Search box**: filters the visible items for the selected app. It searches item content and (where available) legacy board metadata.
-- **Secret-safe mode (checkbox)**: enable/disable the secret-safe heuristics.
-- **Edit Blocklist**: opens a small editor where you can add/remove app name substrings to block from capture.
-- **Per-app capture toggle**: enable or disable capture for the currently-selected app (useful to stop capturing from a specific app without blocking it globally).
-- **Context menu (right-click on an item)**: copy, clip actions (trim, one-line, extract URLs, JSON-escape, camel/snake), Pin/Unpin.
+
+- **Pause (ms)**: sets how long capture is paused after the app writes back to the clipboard.
+- **App dropdown**: selects the source application whose history you want to inspect.
+- **Search box**: filters the current app's history.
+- **Secret-safe mode**: enables or disables privacy heuristics.
+- **Edit Blocklist**: changes the app substring blocklist used by Secret-safe mode.
+- **Per-app capture toggle**: disables or enables capture for the selected app.
+- **Context menu**: copy, transform, pin, and unpin items.
 
 ### Hotkey
-- An in-app hotkey (Ctrl+`) shows the window and focuses the search box; this is NOT a system-wide/global hotkey.
 
+The default shortcut is an **in-app** hotkey, `Ctrl+\``, which shows the window and focuses search. It is not a global system hotkey.
 
-## Data migration (if you upgraded from an older version)
-If your existing local persistence DB was created by a prior release that stored `board` values, you may want to remove that column to match the current schema.
-
-A helper migration script is provided: `scripts/drop_board_column.py`.
-
-Dry-run (recommended):
-
-```bash
-PYTHONPATH=. python scripts/drop_board_column.py --db ./.local/persistence.db
-```
-
-Apply the migration (the script automatically creates a backup at `./.local/persistence.db.bak`):
-
-```bash
-PYTHONPATH=. python scripts/drop_board_column.py --db ./.local/persistence.db --apply
-```
-
-After applying, you can inspect the DB with sqlite3:
-
-```bash
-sqlite3 ./.local/persistence.db "PRAGMA table_info(items);"
-sqlite3 ./.local/persistence.db "SELECT COUNT(*) FROM items;"
-```
-
-
-## Security & Privacy
+## Privacy and Security
 
 ### Defaults
-- Secret-safe mode is ON by default.
-- Persistence is OFF by default (history, pins, and settings are stored in memory only unless you enable persistence explicitly by setting `CLIP_PERSISTENCE_DB`).
-- Common sensitive apps are pre-populated into the blocklist (password managers, authenticators, keychain-like apps).
 
-### Per-app controls
-- The UI exposes a "Per-app capture" toggle which lets you enable or disable capturing for the currently-selected app without altering the global blocklist.
+- Secret-safe mode is enabled by default.
+- Persistence is disabled by default.
+- Common password-manager, authenticator, and keychain-like apps are pre-populated in the blocklist.
 
-### Accessibility permission (macOS)
-- For accurate frontmost-application attribution on macOS the app requires Accessibility privileges. If attribution shows as `Unknown App` or returns `Python` frequently, grant accessibility to either the Python interpreter used to run the app or to the packaged app binary: System Settings → Privacy & Security → Accessibility. After granting permission, restart the application and re-run with `CLIP_DEBUG=2` to verify attribution samples.
+### Accessibility note
 
-### Security notes
-- Token/JWT heuristics attempt to detect likely secrets and keep them temporary when Secret-safe mode is enabled; heuristics are conservative and may not catch all secrets. If you need stronger guarantees, avoid enabling persistence or implement secure encrypted storage.
-- If you enable persistence, consider encrypting persisted data or storing only metadata (timestamps, app names) depending on your threat model.
+For more accurate frontmost-app attribution on macOS, the app may require Accessibility permission. If attribution frequently falls back to `Unknown App` or `Python`, grant Accessibility access to the Python interpreter or packaged app in:
 
+`System Settings -> Privacy & Security -> Accessibility`
 
-## Configuration and Settings
+Then restart the app and, if needed, run with verbose debug logging.
 
-### Configuration constants in `clipboard_manager/history.py`:
-- `MAX_RECENT_HASHES` — LRU size for dedupe (default 200)
-- `APP_DEDUPE_SECONDS` — per-app dedupe window (default 30 seconds)
-- `TEMPORARY_TOKEN_SECONDS` — how long token-like clips are kept before auto-deletion (default 30 seconds)
+### Threat-model caveat
 
-### Secret-safe blocklist
-- Edit blocklist from the UI (Edit Blocklist) or programmatically via `History.set_blocklist(...)`.
+Secret-safe mode improves behavior, but it is still heuristic-based. It does not replace encrypted storage or a stronger secret-management model. If your threat model is strict, leave persistence disabled or add encryption around persisted data.
 
-### Persistence (optional)
+## Persistence
 
-You can enable on-disk persistence using a small SQLite database. Persistence stores clipboard items and a few settings (secret-safe toggle, blocklist) so your history survives restarts.
+Persistence is optional and uses SQLite.
 
-To enable persistence, set the `CLIP_PERSISTENCE_DB` environment variable to a path where the app can write a SQLite file. Example (macOS / Linux):
+To enable it:
 
 ```bash
-# from project root, enable persistence to a local ./.local/persistence.db file
 export CLIP_PERSISTENCE_DB=./.local/persistence.db
 python clipboard_manager/main.py
 ```
 
-**Notes:**
-- The persistence implementation is intentionally minimal and uses SQLite with WAL mode for reliability.
-- Settings saved: `secret_safe_enabled` and `blocklist_apps`.
-- Items are saved on capture and updates (pin/unpin) and temporary token items are auto-deleted after their configured lifetime.
-- To disable persistence, unset `CLIP_PERSISTENCE_DB` or run the app normally.
+Notes:
 
-### Persistence: quick test & monitor
+- The database is created automatically if needed.
+- SQLite runs with WAL mode enabled for better reliability.
+- Settings such as Secret-safe state and blocklist are saved.
+- Clipboard items are saved on capture and update.
+- Temporary secret-like items are removed after their configured lifetime.
 
-You can run a tiny smoke test that writes an item through the normal `History` + `Persistence` flow and then prints the DB rows. A test script is included at `scripts/test_persistence_run.py`:
+## Configuration
 
-```bash
-PYTHONPATH=. python3 scripts/test_persistence_run.py
-```
+The main tunables live in `clipboard_manager/history.py` and environment variables used by the watcher.
 
-To actively monitor the DB for new rows (handy while reproducing copy flows), you can run a small monitor script (see `scripts/monitor_db.py`). It polls the DB and prints newly-observed items. Example:
+### History tunables
 
-```bash
-PYTHONPATH=. python3 scripts/monitor_db.py
-```
+- `MAX_RECENT_HASHES`: LRU size for dedupe tracking
+- `APP_DEDUPE_SECONDS`: suppresses repeat copies of the same content per app within a short window
+- `TEMPORARY_TOKEN_SECONDS`: lifetime for token-like clipboard entries
 
-### Tunable environment variables
+### Debugging and attribution env vars
 
-The watcher and attribution logic expose several environment-backed tunables useful for debugging and adapting to different machines. These are safe to set in your shell before launching the app.
+- `CLIP_DEBUG=1`: concise debug logs
+- `CLIP_DEBUG=2`: verbose attribution and sampling logs
+- `CP_PRE_MARGIN_MS`
+- `CP_POST_MARGIN_MS`
+- `CP_LOOKBACK_SECONDS`
+- `CP_FREQ_LOOKBACK_SECONDS`
+- `APPKIT_SAMPLES`, `APPKIT_DELAY`, `APPKIT_MIN_COUNT`
+- `AX_SAMPLES`, `AX_DELAY`, `AX_MIN_COUNT`
+- `OSASCRIPT_SAMPLES`, `OSASCRIPT_DELAY`, `OSASCRIPT_MIN_COUNT`, `OSASCRIPT_CONSECUTE`
 
-- `CP_PRE_MARGIN_MS` — pre-copy margin (ms) to consider recent focus history when attributing a clipboard event (default 500)
-- `CP_POST_MARGIN_MS` — post-copy margin (ms) to include short delays after the clipboard event (default 50)
-- `CP_LOOKBACK_SECONDS` — how many seconds of app-activation history to consult for attribution (default ~2.5)
-- `CP_FREQ_LOOKBACK_SECONDS` — wider lookback for frequency-based heuristics (default ~5.0)
-- `APPKIT_SAMPLES`, `APPKIT_DELAY`, `APPKIT_MIN_COUNT` — sampling knobs when using AppKit/pyobjc
-- `AX_SAMPLES`, `AX_DELAY`, `AX_MIN_COUNT` — sampling knobs for Accessibility probe
-- `OSASCRIPT_SAMPLES`, `OSASCRIPT_DELAY`, `OSASCRIPT_MIN_COUNT`, `OSASCRIPT_CONSECUTE` — osascript sampling settings
-
-### Debug helpers
-
-- `CLIP_DEBUG=1` prints concise attribution logs.
-- `CLIP_DEBUG=2` prints verbose sampling/debug dumps (useful when tuning attribution and dedupe).
-
-Example: run with more permissive post margin and verbose debug:
+Example:
 
 ```bash
 export CP_POST_MARGIN_MS=100
@@ -224,97 +231,81 @@ export CLIP_DEBUG=2
 PYTHONPATH=. python3 -m clipboard_manager.main
 ```
 
+## Data Migration
 
-## Developer Notes & Architecture
+If you are upgrading from an older version that persisted a `board` column, a helper migration is included.
 
-### Key modules
-- `clipboard_manager/watcher.py` — `ClipboardWatcher` emits `clipboard_changed(content, source_app, timestamp)` and exposes `pause(ms)`, `resume()`, and `set_text(text, pause_ms)`.
-- `clipboard_manager/history.py` — `HistoryStore` handles dedupe, blocklist, token heuristics, temporary-marking and pin management. Exported alias: `History`.
-- `clipboard_manager/boards.py` — retained for reference only; board routing is no longer used for new persisted data.
-- `clipboard_manager/gui.py` — `MainWindow` renders the UI and uses stable item IDs for list rows.
-- `clipboard_manager/clipboard_item.py` — `ClipboardItem` model: id, content, source_app, timestamp, is_temporary, expire_at, pinned.
-
-### Testing strategy
-- Unit tests cover utilities and critical behavior (dedupe, secret-safe heuristics, pin/unpin ordering).
-- A smoke test exercises `ClipboardWatcher` + `History` pause behavior without requiring a visible UI (`tests/smoke_pause_test.py`).
-
-### Running tests (no pytest required)
-
-The repo contains small test scripts that can be executed directly. Example:
+Dry run:
 
 ```bash
-python tests/test_utils.py
-python tests/test_secret_safe.py
-python tests/test_pins.py
-python tests/smoke_pause_test.py
-python tests/gui_startup.py  # non-blocking GUI startup check
+PYTHONPATH=. python scripts/drop_board_column.py --db ./.local/persistence.db
 ```
 
-
-## CI and Testing
-
-This repository includes a GitHub Actions workflow that runs the test suite and enforces a minimum coverage threshold.
-
-- **Workflow file**: `.github/workflows/ci.yml`
-- **Coverage requirement**: the CI enforces a minimum coverage (default set to 70%). The workflow runs tests in a headless environment using `xvfb` so GUI tests (pytest-qt) run reliably.
-- **Coverage reports** are uploaded to Codecov. See the Codecov badge at the top of this README for the latest project coverage.
-
-### Run tests locally with coverage (recommended):
+Apply:
 
 ```bash
-# install test deps from repo
+PYTHONPATH=. python scripts/drop_board_column.py --db ./.local/persistence.db --apply
+```
+
+The script creates a backup automatically before modifying the database.
+
+## Testing and CI
+
+This repo is not just manually demoed. It includes automated testing and CI for both core logic and GUI-related behavior.
+
+- GitHub Actions runs the test suite.
+- Coverage is enforced in CI.
+- Codecov publishes coverage reports.
+- The test suite covers utilities, dedupe behavior, secret-safe handling, persistence, pins, settings, and GUI interactions.
+
+### Run tests locally
+
+```bash
 python3 -m pip install -r requirements-ci.txt
-# run pytest with coverage
 pytest -q -m "not gui" --cov=clipboard_manager --cov-report=term-missing
 ```
 
-If you want to run GUI tests locally in an environment without a display, use Xvfb (Linux) or run on macOS directly:
+### Run GUI tests
+
+On macOS, run them directly. On Linux/headless environments, use Xvfb.
 
 ```bash
-# on Linux with Xvfb
-sudo apt-get install xvfb
 xvfb-run -s "-screen 0 1920x1080x24" pytest -q
 ```
 
-If the CI badge link in the README is incorrect, replace the `your-org/your-repo` path with the actual GitHub owner and repository name to enable the badge.
-
-
 ## Troubleshooting
 
-**Q: `ModuleNotFoundError: No module named 'PyQt6'` when running tests or app**
-- Ensure PyQt6 is installed into the Python interpreter you use (activate your venv and run `python -m pip install PyQt6`).
+### `ModuleNotFoundError: No module named 'PyQt6'`
 
-**Q: `Unknown App` is shown as the source app**
-- The project uses an AppleScript call (`osascript`) to ask macOS which app is frontmost. If your environment restricts automation, this may fail and fallback to `Unknown App`.
+Install dependencies into the same interpreter you use to run the app.
 
-**Q: Items disappear (temporary tokens)**
-- Token/JWT-like content is removed automatically by design when Secret-safe mode is enabled (default 30 seconds). Disable Secret-safe mode to keep all clips.
+### Source app shows as `Unknown App`
 
+This usually means attribution permissions or automation calls are restricted. Check Accessibility permissions first.
 
-## Building a macOS app and DMG
+### Items disappear unexpectedly
 
-I included helper scripts and a PyInstaller spec so I (or another developer) can experiment locally; however, I am not publishing official signed builds from this repository right now. If I decide to publish a signed/notarized macOS build later, I'll document the release steps here.
+If Secret-safe mode is enabled, token-like content may be intentionally treated as temporary and removed after its timeout.
 
-If you are a developer and want to experiment locally (for testing only), the helper scripts remain in the `scripts/` folder:
+## Building a macOS App
+
+Local packaging helpers are included for experimentation, but this repository is not currently publishing official signed builds.
+
+Available helpers:
+
+- `scripts/build_dmg.sh`
+- `scripts/make_icns.sh`
+- `CopyPasteTool.spec`
+
+Example local packaging flow:
 
 ```bash
-# OPTIONAL local experiment (macOS only) — packaging is for developer experimentation
-# create and activate a venv, install deps
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 pip install pyinstaller
-
-# OPTIONAL: create an icns from the icon.iconset (macOS only)
-# ./scripts/make_icns.sh
-
-# build the app and dmg locally (not recommended for end-user distribution)
-# ./scripts/build_dmg.sh
+./scripts/build_dmg.sh
 ```
 
-Notes:
-- The scripts are intended for local experimentation by developers only. Do not check generated build artifacts (for example `.dmg` files) into the repository.
-- If I later publish official, signed, and notarized releases, I will add those artifacts and explicit release notes.
-
-Last updated: 2026-02-07
+This should be treated as a developer workflow, not an end-user distribution path.
