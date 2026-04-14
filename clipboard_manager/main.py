@@ -1,6 +1,7 @@
 import sys
 import os
 import pathlib
+
 project_root = pathlib.Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
@@ -16,40 +17,48 @@ except Exception:
 
 NO_GUI = os.environ.get('CLIP_NO_GUI') == '1' or '--no-gui' in sys.argv
 
-# Prefer explicit env var for DB path, otherwise fall back to settings
-DB_PATH = os.environ.get('CLIP_PERSISTENCE_DB')
-if not DB_PATH:
-    try:
-        if settings.get('persistence_enabled'):
-            DB_PATH = settings.get('persistence_path') or os.path.expanduser('~/.local/persistence.db')
-    except Exception:
-        DB_PATH = None
+def _resolve_persistence():
+    db_path = os.environ.get('CLIP_PERSISTENCE_DB')
+    if not db_path:
+        try:
+            if settings.get('persistence_enabled'):
+                db_path = settings.get('persistence_path') or os.path.expanduser('~/.local/persistence.db')
+        except Exception:
+            db_path = None
 
-if DB_PATH:
+    if not db_path:
+        return None
+
     try:
         from clipboard_manager.storage import Persistence
-        persistence = Persistence(DB_PATH)
+        return Persistence(db_path)
     except Exception:
-        persistence = None
-else:
-    persistence = None
+        return None
 
-if __name__ == '__main__':
+
+def main():
     if NO_GUI:
         print('NO_GUI')
-        sys.exit(0)
+        return 0
+
     app = QApplication(sys.argv)
-    if persistence:
-        from clipboard_manager.history import History
-        history = History(persistence=persistence)
-        window = MainWindow(history=history)
-    else:
-        window = MainWindow()
-    window.show()
-    rc = app.exec()
+    persistence = _resolve_persistence()
     try:
         if persistence:
-            persistence.close()
-    except Exception:
-        pass
-    sys.exit(rc)
+            from clipboard_manager.history import History
+            history = History(persistence=persistence)
+            window = MainWindow(history=history)
+        else:
+            window = MainWindow()
+        window.show()
+        return app.exec()
+    finally:
+        try:
+            if persistence:
+                persistence.close()
+        except Exception:
+            pass
+
+
+if __name__ == '__main__':
+    sys.exit(main())

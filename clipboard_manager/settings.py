@@ -117,6 +117,3 @@ def load_settings(app_name: str = "CopyPasteTool") -> Dict[str, Any]:
                 pass
     _settings = cfg
     return _settings
-
-# Do NOT auto-load persisted settings at module import time. Call load_settings() explicitly
-# from application startup (e.g., clipboard_manager.main) when you want to read persisted config.

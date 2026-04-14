@@ -48,7 +48,6 @@ class HistoryStore:
             if key == 'secret_safe_mode':
                 self.set_secret_safe_enabled(bool(value))
             if key == 'blocklist_apps':
-                # value might be list or newline string
                 if isinstance(value, (list, tuple)):
                     entries = value
                 elif isinstance(value, str):
@@ -280,7 +279,6 @@ class HistoryStore:
                 expire_at = now + TEMPORARY_TOKEN_SECONDS
 
             item = ClipboardItem(content, source_app, is_temporary=is_temp, expire_at=expire_at)
-            pass
 
             if timestamp is not None:
                 try:

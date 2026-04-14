@@ -41,7 +41,6 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout()
 
         form = QFormLayout()
-        # Basic settings
         self.pause_spin = QSpinBox()
         self.pause_spin.setRange(0, 5000)
         self.pause_spin.setSingleStep(50)
@@ -58,17 +57,14 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(form)
 
-        # Blocklist editor quick access
         bl_layout = QHBoxLayout()
         self.edit_blocklist_btn = QPushButton('Edit blocklist')
         bl_layout.addWidget(self.edit_blocklist_btn)
         layout.addLayout(bl_layout)
         self.blocklist_btn = self.edit_blocklist_btn
-        # keep blocklist edits local until Apply
         self._pending_blocklist = list(settings.get('blocklist_apps', []) or [])
         self.edit_blocklist_btn.clicked.connect(self._on_edit_blocklist)
 
-        # Advanced section
         adv_group_layout = QVBoxLayout()
         adv_form = QFormLayout()
         self.dedupe_lru_spin = QSpinBox()
@@ -83,7 +79,6 @@ class SettingsDialog(QDialog):
         self.dedupe_per_app_spin.setValue(int(settings.get('dedupe_per_app_window_s', 30)))
         adv_form.addRow('Per-app dedupe window (s):', self.dedupe_per_app_spin)
 
-        # per-app capture toggles editor (simple text form: app=1/app=0 per line)
         self.per_app_text = QTextEdit()
         per_app_map = settings.get('per_app_capture_toggle', {}) or {}
         try:
@@ -99,7 +94,6 @@ class SettingsDialog(QDialog):
         adv_group_layout.addLayout(adv_form)
         layout.addLayout(adv_group_layout)
 
-        # reset and action buttons
         action_layout = QHBoxLayout()
         self.reset_btn = QPushButton('Reset to defaults')
         self.reset_btn.clicked.connect(self._on_reset)
@@ -123,16 +117,12 @@ class SettingsDialog(QDialog):
             self._pending_blocklist = entries
 
     def _on_apply(self):
-        # Apply settings immediately and keep dialog open
         settings.set_('pause_after_set_ms', int(self.pause_spin.value()))
         settings.set_('secret_safe_mode', bool(self.secret_safe_chk.isChecked()))
         settings.set_('persistence_enabled', bool(self.persistence_chk.isChecked()))
-        # apply pending blocklist
         settings.set_('blocklist_apps', list(self._pending_blocklist or []))
-        # advanced settings
         settings.set_('dedupe_lru_size', int(self.dedupe_lru_spin.value()))
         settings.set_('dedupe_per_app_window_s', int(self.dedupe_per_app_spin.value()))
-        # per-app capture parsing
         pam = {}
         try:
             for line in (self.per_app_text.toPlainText() or '').splitlines():
@@ -144,13 +134,9 @@ class SettingsDialog(QDialog):
         except Exception:
             pam = settings.get('per_app_capture_toggle', {}) or {}
         settings.set_('per_app_capture_toggle', pam)
-        # commit to disk immediately since user explicitly applied
         settings.save_settings()
-        # notify user via callbacks (callbacks already invoked by set_)
-        # do not close the dialog on Apply; user can Close when done
 
     def _on_reset(self):
-        # reset UI fields to defaults (in-memory, not persisted until Apply)
         d = settings.DEFAULTS if hasattr(settings, 'DEFAULTS') else {}
         try:
             self.pause_spin.setValue(int(d.get('pause_after_set_ms', 500)))
@@ -164,13 +150,6 @@ class SettingsDialog(QDialog):
             self._pending_blocklist = list(d.get('blocklist_apps', []))
         except Exception:
             pass
-
-    def closeEvent(self, event):
-        try:
-            self.history.remove_change_listener(self._history_listener)
-        except Exception:
-            pass
-        return super(MainWindow, self).closeEvent(event)
 
 
 class MainWindow(QMainWindow):
