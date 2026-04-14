@@ -13,13 +13,13 @@ This README covers: installation, key features (Secret-safe mode, Pins, Search, 
 - [Features](#features)
 - [Quick Start (macOS)](#quick-start-macos)
 - [UI Walkthrough](#ui-walkthrough)
+- [Data migration](#data-migration-if-you-upgraded-from-an-older-version)
 - [Security & Privacy](#security--privacy)
-- [CI and Testing](#ci-and-testing)
 - [Configuration and Settings](#configuration-and-settings)
-- [Developer Notes](#developer-notes)
-- [Tests and Validation](#tests-and-validation)
+- [Developer Notes & Architecture](#developer-notes--architecture)
+- [CI and Testing](#ci-and-testing)
 - [Troubleshooting](#troubleshooting)
-- [Contributing & License](#contributing--license)
+- [Building a macOS app and DMG](#building-a-macos-app-and-dmg)
 
 ---
 
