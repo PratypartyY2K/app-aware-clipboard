@@ -6,9 +6,9 @@ from clipboard_manager.history import HistoryStore
 
 def test_pin_unpin_ordering():
     hs = HistoryStore()
-    a = hs.add_item('first', source_app='App')
+    hs.add_item('first', source_app='App')
     b = hs.add_item('second', source_app='App')
-    c = hs.add_item('third', source_app='App')
+    hs.add_item('third', source_app='App')
     ids_before = [it.content for it in hs.items]
     assert ids_before[0] == 'third'
     hs.pin_item(b.id)

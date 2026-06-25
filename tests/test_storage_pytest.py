@@ -15,4 +15,3 @@ def test_persistence_save_and_load(tmp_path):
     assert any(r['id'] == it.id for r in items)
     p.close()
     p2.close()
-

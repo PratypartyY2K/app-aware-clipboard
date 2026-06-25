@@ -6,11 +6,11 @@ pytestmark = pytest.mark.gui
 
 
 def test_update_list_and_actions(monkeypatch, qtbot):
-    app = QApplication.instance() or QApplication([])
+    QApplication.instance() or QApplication([])
     w = MainWindow()
     qtbot.addWidget(w)
 
-    it = w.history.add_item('example content http://example.com', source_app='Google Chrome')
+    w.history.add_item('example content http://example.com', source_app='Google Chrome')
     w.update_apps_dropdown()
     w.update_list()
     assert w.list_widget.count() >= 1

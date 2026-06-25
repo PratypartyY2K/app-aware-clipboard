@@ -39,4 +39,3 @@ def test_corrupt_file_backup(tmp_path):
         assert s['pause_after_set_ms'] == settings.DEFAULTS['pause_after_set_ms']
     finally:
         pass
-

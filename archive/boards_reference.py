@@ -129,4 +129,3 @@ class BoardRouter:
                 spec['predicates'].append(ps)
             out.append(spec)
         return out
-

@@ -44,7 +44,6 @@ def test_get_frontmost_app_osascript_freq_choice(monkeypatch):
 
 
 def test_internal_appkit_ax_mouse_helpers(monkeypatch):
-    dummy_app = types.SimpleNamespace()
     dummy_active = types.SimpleNamespace()
     dummy_active.localizedName = lambda: 'AppKitApp'
     ws = types.SimpleNamespace()

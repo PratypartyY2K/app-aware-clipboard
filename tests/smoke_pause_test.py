@@ -5,9 +5,8 @@ from PyQt6.QtWidgets import QApplication
 from clipboard_manager.watcher import ClipboardWatcher
 from clipboard_manager.history import History
 
-
 def main():
-    app = QApplication([])
+    QApplication([])
 
     watcher = ClipboardWatcher()
     history = History()

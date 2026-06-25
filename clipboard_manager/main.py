@@ -6,9 +6,9 @@ project_root = pathlib.Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from PyQt6.QtWidgets import QApplication
-from clipboard_manager.gui import MainWindow
-from clipboard_manager import settings
+from PyQt6.QtWidgets import QApplication  # noqa: E402
+from clipboard_manager.gui import MainWindow  # noqa: E402
+from clipboard_manager import settings  # noqa: E402
 
 try:
     settings.load_settings()

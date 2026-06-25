@@ -69,4 +69,3 @@ def test_probe_frontmost_methods_handles_errors(monkeypatch):
     assert isinstance(out['osascript_samples'], list)
     assert out['appkit'] is None and out['ax'] is None and out['mouse_window_owner'] is None
 
-

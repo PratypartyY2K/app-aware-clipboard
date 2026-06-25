@@ -3,7 +3,7 @@ from clipboard_manager.watcher import ClipboardWatcher
 
 
 def test_watcher_signal(monkeypatch, qtbot):
-    app = QApplication.instance() or QApplication([])
+    QApplication.instance() or QApplication([])
     watcher = ClipboardWatcher()
     received = []
     def on_change(text, source_app, ts):

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 import os
 import sys
+import time
+from collections import deque
+
 repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if repo_root not in sys.path:
     sys.path.insert(0, repo_root)
 
-import time
-from collections import deque
-from clipboard_manager.watcher import ClipboardWatcher
+from clipboard_manager.watcher import ClipboardWatcher  # noqa: E402
 
 out = []
 
