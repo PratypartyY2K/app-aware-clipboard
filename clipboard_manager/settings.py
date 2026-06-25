@@ -88,13 +88,6 @@ def register_callback(cb: Callable[[str, Any], None]) -> None:
         _callbacks.append(cb)
 
 
-def unregister_callback(cb: Callable[[str, Any], None]) -> None:
-    try:
-        _callbacks.remove(cb)
-    except ValueError:
-        pass
-
-
 def load_settings(app_name: str = "CopyPasteTool") -> Dict[str, Any]:
     global _settings
     merged_settings = DEFAULTS.copy()

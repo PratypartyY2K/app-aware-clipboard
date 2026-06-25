@@ -192,11 +192,6 @@ class HistoryStore:
             if removed:
                 self._notify_change()
 
-    def stop_cleanup(self):
-        self._cleanup_event.set()
-        if self._cleanup_thread is not None:
-            self._cleanup_thread.join(timeout=1.0)
-
     def _looks_like_token(self, text: str) -> bool:
         if not text:
             return False

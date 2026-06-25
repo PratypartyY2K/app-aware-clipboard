@@ -61,7 +61,6 @@ class SettingsDialog(QDialog):
         self.edit_blocklist_btn = QPushButton('Edit blocklist')
         bl_layout.addWidget(self.edit_blocklist_btn)
         layout.addLayout(bl_layout)
-        self.blocklist_btn = self.edit_blocklist_btn
         self._pending_blocklist = list(settings.get('blocklist_apps', []) or [])
         self.edit_blocklist_btn.clicked.connect(self._on_edit_blocklist)
 

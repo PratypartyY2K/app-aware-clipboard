@@ -21,7 +21,6 @@ def _env_int(name: str, default: int) -> int:
 
 DEFAULT_LOOKBACK = _env_float('CP_LOOKBACK_SECONDS', 2.5)
 DEFAULT_FREQ_LOOKBACK = _env_float('CP_FREQ_LOOKBACK_SECONDS', 5.0)
-OWNER_MIN_SCORE = _env_int('CP_MIN_OWNER_SCORE', 0)
 OWNER_WEIGHT_BROWSER = _env_int('CP_WEIGHT_BROWSER', 50)
 OWNER_WEIGHT_COMM = _env_int('CP_WEIGHT_COMM', 30)
 OWNER_WEIGHT_IDE = _env_int('CP_WEIGHT_IDE', 20)
