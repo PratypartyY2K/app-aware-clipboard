@@ -1,5 +1,4 @@
 import os
-import pytest
 from clipboard_manager.gui import SettingsDialog
 from clipboard_manager import settings
 

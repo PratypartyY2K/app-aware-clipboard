@@ -1,5 +1,4 @@
 import types
-import os
 import subprocess
 from clipboard_manager import utils
 

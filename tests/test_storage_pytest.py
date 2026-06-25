@@ -1,4 +1,3 @@
-import os
 import time
 from clipboard_manager.storage import Persistence
 from clipboard_manager.history import History

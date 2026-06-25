@@ -82,7 +82,7 @@ class ClipboardWatcher(QObject):
                                     except Exception:
                                         name = None
                                     if name:
-                                        self._watcher._record_app(str(name))
+                                        self._watcher._record_app_activation(str(name))
                             except Exception:
                                 pass
 
@@ -97,7 +97,7 @@ class ClipboardWatcher(QObject):
 
         if not self._use_appkit_notifications:
             self._app_timer = QTimer(self)
-            self._app_timer.timeout.connect(self._capture_active_app)
+            self._app_timer.timeout.connect(self._sample_active_app)
             self._app_timer.start(150)
 
         try:
@@ -115,8 +115,7 @@ class ClipboardWatcher(QObject):
             pass
 
 
-    def _record_app(self, app_name: str):
-        """Record an app activation event from AppKit observer. Respect pause/ignore windows."""
+    def _record_app_activation(self, app_name: str):
         try:
             if not app_name:
                 return
@@ -137,8 +136,7 @@ class ClipboardWatcher(QObject):
             pass
 
 
-    def _capture_active_app(self):
-        """Continuously sample the currently-frontmost app (best-effort) and record changes."""
+    def _sample_active_app(self):
         try:
             app = get_frontmost_app()
         except Exception:
@@ -182,180 +180,167 @@ class ClipboardWatcher(QObject):
     def _normalize_app_name(self, name: str) -> str:
         if not name:
             return name
-        n = name.strip()
-        nl = n.lower()
-        for k, v in self._NORMALIZE_MAP:
-            if k in nl:
-                return v
-        return n
+        normalized = name.strip()
+        name_lower = normalized.lower()
+        for alias, canonical_name in self._NORMALIZE_MAP:
+            if alias in name_lower:
+                return canonical_name
+        return normalized
 
     def score_owner(self, owner_name: str, text_lower: str, allow_ide: bool, code_like: bool) -> int:
-        """Score a top-window owner name based on heuristics and tunables."""
         if not owner_name:
             return -999
-        n = owner_name.lower()
-        if any(k in n for k in ('clipboard', 'copy-paste-tool', 'python', 'python3', 'terminal', 'iterm')):
+        owner_lower = owner_name.lower()
+        if any(name in owner_lower for name in ('clipboard', 'copy-paste-tool', 'python', 'python3', 'terminal', 'iterm')):
             return -999
-        if any(ign in n for ign in self._IGNORED_OWNERS):
+        if any(ignored in owner_lower for ignored in self._IGNORED_OWNERS):
             return -999
         score = 0
-        if any(k in n for k in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
+        if any(name in owner_lower for name in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
             score += OWNER_WEIGHT_BROWSER
-        if any(k in n for k in ('discord', 'slack', 'teams')):
+        if any(name in owner_lower for name in ('discord', 'slack', 'teams')):
             score += OWNER_WEIGHT_COMM
-        if any(k in n for k in ('pycharm', 'intellij', 'vscode', 'sublime', 'atom', 'webstorm', 'visual studio code')):
+        if any(name in owner_lower for name in ('pycharm', 'intellij', 'vscode', 'sublime', 'atom', 'webstorm', 'visual studio code')):
             score += OWNER_WEIGHT_IDE
         score += 1
         if text_lower:
-            if any(tok in text_lower for tok in ('http://', 'https://', 'www.')) and any(k in n for k in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
+            if any(token in text_lower for token in ('http://', 'https://', 'www.')) and any(name in owner_lower for name in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
                 score += OWNER_CONTENT_BOOST
-            if code_like and any(k in n for k in ('pycharm', 'intellij', 'vscode', 'sublime')):
+            if code_like and any(name in owner_lower for name in ('pycharm', 'intellij', 'vscode', 'sublime')):
                 score += OWNER_CODE_BOOST
             try:
                 for part in text_lower.split():
-                    if part and part in n:
+                    if part and part in owner_lower:
                         score += 2
             except Exception:
                 pass
         return score
 
     def _pick_recent_source_app(self, ts: float, *, allow_ide: bool, code_like: bool = False, language_hint: str | None = None) -> str | None:
-        """Pick the most likely source app from recent focus history using recency+frequency scoring.
+        lookback_window = DEFAULT_LOOKBACK
 
-        Returns canonicalized app name or None.
-        """
-        LOOKBACK = DEFAULT_LOOKBACK
+        def is_ide(app_name: str) -> bool:
+            name_lower = app_name.lower()
+            return any(name in name_lower for name in ('pycharm', 'intellij', 'idea', 'webstorm', 'goland', 'clion', 'rider', 'vscode', 'visual studio code', 'sublime', 'atom'))
 
-        def is_browser_name(n: str) -> bool:
-            nl = n.lower()
-            return any(k in nl for k in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera'))
-
-        def is_comm_name(n: str) -> bool:
-            nl = n.lower()
-            return any(k in nl for k in ('discord', 'slack', 'teams', 'whatsapp', 'notion', 'outlook'))
-
-        def is_ide(name: str) -> bool:
-            n = name.lower()
-            return any(k in n for k in ('pycharm', 'intellij', 'idea', 'webstorm', 'goland', 'clion', 'rider', 'vscode', 'visual studio code', 'sublime', 'atom'))
-
-        def is_self(name: str) -> bool:
-            n = name.lower()
-            return any(k in n for k in ('clipboard', 'copy-paste-tool', 'python', 'python3', 'terminal', 'iterm'))
+        def is_self(app_name: str) -> bool:
+            name_lower = app_name.lower()
+            return any(name in name_lower for name in ('clipboard', 'copy-paste-tool', 'python', 'python3', 'terminal', 'iterm'))
 
         if not self._app_history:
             return None
 
-        cutoff = ts - LOOKBACK
+        cutoff = ts - lookback_window
         if code_like:
-            lang_map = {
+            preferred_ides_by_language = {
                 'python': ('pycharm', 'intellij'),
                 'javascript': ('vscode', 'visual studio code', 'webstorm'),
                 'js': ('vscode', 'visual studio code', 'webstorm'),
             }
             preferred_ides = ()
-            if language_hint and language_hint in lang_map:
-                preferred_ides = lang_map[language_hint]
+            if language_hint and language_hint in preferred_ides_by_language:
+                preferred_ides = preferred_ides_by_language[language_hint]
             if language_hint:
-                canonical_map = {
+                preferred_apps_by_language = {
                     'python': 'PyCharm',
                     'javascript': 'Visual Studio Code',
                     'js': 'Visual Studio Code',
                 }
-                target = canonical_map.get(language_hint)
-                if target:
+                target_app = preferred_apps_by_language.get(language_hint)
+                if target_app:
                     freq_cutoff = ts - DEFAULT_FREQ_LOOKBACK
-                    for t, name in reversed(self._app_history):
-                        if t < freq_cutoff:
+                    for seen_at, app_name in reversed(self._app_history):
+                        if seen_at < freq_cutoff:
                             break
-                        if not name:
+                        if not app_name:
                             continue
-                        if is_self(name):
+                        if is_self(app_name):
                             continue
-                        if any(ign in name.lower() for ign in self._IGNORED_OWNERS):
+                        if any(ignored in app_name.lower() for ignored in self._IGNORED_OWNERS):
                             continue
-                        if target.lower() in name.lower():
-                            return self._normalize_app_name(name)
+                        if target_app.lower() in app_name.lower():
+                            return self._normalize_app_name(app_name)
             if preferred_ides:
-                for t, name in reversed(self._app_history):
-                    if t < cutoff:
+                for seen_at, app_name in reversed(self._app_history):
+                    if seen_at < cutoff:
                         break
-                    if not name:
+                    if not app_name:
                         continue
-                    if is_self(name):
+                    if is_self(app_name):
                         continue
-                    if any(ign in name.lower() for ign in self._IGNORED_OWNERS):
+                    if any(ignored in app_name.lower() for ignored in self._IGNORED_OWNERS):
                         continue
-                    nl = name.lower()
-                    if any(pid in nl for pid in preferred_ides):
-                        return self._normalize_app_name(name)
-            for t, name in reversed(self._app_history):
-                if t < cutoff:
+                    app_name_lower = app_name.lower()
+                    if any(ide_name in app_name_lower for ide_name in preferred_ides):
+                        return self._normalize_app_name(app_name)
+            for seen_at, app_name in reversed(self._app_history):
+                if seen_at < cutoff:
                     break
-                if not name:
+                if not app_name:
                     continue
-                if is_self(name):
+                if is_self(app_name):
                     continue
-                if any(ign in name.lower() for ign in self._IGNORED_OWNERS):
+                if any(ignored in app_name.lower() for ignored in self._IGNORED_OWNERS):
                     continue
-                if is_ide(name):
-                    return self._normalize_app_name(name)
+                if is_ide(app_name):
+                    return self._normalize_app_name(app_name)
 
-        freq = {}
+        recent_counts = {}
         last_seen = {}
-        for t, name in self._app_history:
-            if not name:
+        for seen_at, app_name in self._app_history:
+            if not app_name:
                 continue
-            if t < cutoff:
+            if seen_at < cutoff:
                 continue
-            nl = name.lower()
-            if is_self(name):
+            name_lower = app_name.lower()
+            if is_self(app_name):
                 continue
-            if any(ign in nl for ign in self._IGNORED_OWNERS):
+            if any(ignored in name_lower for ignored in self._IGNORED_OWNERS):
                 continue
-            key = self._normalize_app_name(name)
-            freq[key] = freq.get(key, 0) + 1
-            last_seen[key] = max(last_seen.get(key, 0), t)
+            canonical_name = self._normalize_app_name(app_name)
+            recent_counts[canonical_name] = recent_counts.get(canonical_name, 0) + 1
+            last_seen[canonical_name] = max(last_seen.get(canonical_name, 0), seen_at)
 
-        if not freq:
+        if not recent_counts:
             return None
 
         if language_hint:
-            canonical_map = {
+            preferred_apps_by_language = {
                 'python': 'PyCharm',
                 'javascript': 'Visual Studio Code',
                 'js': 'Visual Studio Code',
             }
-            tgt = canonical_map.get(language_hint)
-            if tgt:
-                for k in freq.keys():
-                    if tgt.lower() in k.lower() or k.lower() in tgt.lower():
-                        return tgt
+            target_app = preferred_apps_by_language.get(language_hint)
+            if target_app:
+                for app_name in recent_counts.keys():
+                    if target_app.lower() in app_name.lower() or app_name.lower() in target_app.lower():
+                        return target_app
 
-        for t, name in reversed(self._app_history):
-            if t < cutoff:
+        for seen_at, app_name in reversed(self._app_history):
+            if seen_at < cutoff:
                 break
-            if not name:
+            if not app_name:
                 continue
-            if is_self(name):
+            if is_self(app_name):
                 continue
-            if any(ign in name.lower() for ign in self._IGNORED_OWNERS):
+            if any(ignored in app_name.lower() for ignored in self._IGNORED_OWNERS):
                 continue
-            if not is_ide(name):
-                return self._normalize_app_name(name)
+            if not is_ide(app_name):
+                return self._normalize_app_name(app_name)
 
         best = None
         best_score = -1.0
         now = ts
-        total = sum(freq.values())
-        for name, count in freq.items():
-            recency = now - last_seen.get(name, now)
+        total = sum(recent_counts.values())
+        for app_name, count in recent_counts.items():
+            recency = now - last_seen.get(app_name, now)
             recency_score = 1.0 / (1.0 + recency)
             score = recency_score * 0.7 + (count / max(1, total)) * 0.3
-            if is_ide(name) and allow_ide:
+            if is_ide(app_name) and allow_ide:
                 score += 0.15 + (0.6 if code_like else 0.0)
             if score > best_score:
                 best_score = score
-                best = name
+                best = app_name
 
         return best
 
@@ -401,66 +386,67 @@ class ClipboardWatcher(QObject):
         post_ms = int(os.environ.get('CP_POST_MARGIN_MS', '50') or '50')
         pre_margin = float(pre_ms) / 1000.0
         post_margin = float(post_ms) / 1000.0
-        chosen = None
+        likely_app = None
         try:
             candidates = []
-            for t, name in self._app_history:
+            for seen_at, app_name in self._app_history:
                 try:
-                    if not name or not name.strip():
+                    if not app_name or not app_name.strip():
                         continue
-                    if t >= (ts - pre_margin) and t <= (ts + post_margin):
-                        candidates.append((t, name))
+                    if seen_at >= (ts - pre_margin) and seen_at <= (ts + post_margin):
+                        candidates.append((seen_at, app_name))
                 except Exception:
                     continue
             if candidates:
-                def type_weight(name):
-                    nl = name.lower()
-                    if any(k in nl for k in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
+                def type_weight(app_name):
+                    name_lower = app_name.lower()
+                    # Browsers tend to be the real source for copied links and snippets, so
+                    # we bias them slightly when multiple focus events land in the same window.
+                    if any(name in name_lower for name in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
                         return 0.6
-                    if any(k in nl for k in ('pycharm', 'intellij', 'vscode', 'visual studio code', 'sublime', 'atom', 'webstorm')):
+                    if any(name in name_lower for name in ('pycharm', 'intellij', 'vscode', 'visual studio code', 'sublime', 'atom', 'webstorm')):
                         return 0.4
-                    if any(k in nl for k in ('discord', 'slack', 'teams', 'whatsapp')):
+                    if any(name in name_lower for name in ('discord', 'slack', 'teams', 'whatsapp')):
                         return 0.1
                     return 0.2
 
                 best_score = None
                 best_candidate = None
-                for (t, name) in candidates:
+                for seen_at, app_name in candidates:
                     try:
-                        dt = abs(t - ts)
+                        dt = abs(seen_at - ts)
                         recency_score = 1.0 / (1.0 + dt)
-                        weight = type_weight(name)
+                        weight = type_weight(app_name)
                         score = recency_score + weight
                         if best_score is None or score > best_score:
                             best_score = score
-                            best_candidate = name
+                            best_candidate = app_name
                     except Exception:
                         continue
-                chosen = best_candidate
+                likely_app = best_candidate
         except Exception:
             pass
 
         self._ignore_until = ts + 0.1
-        final_app = None
-        if chosen:
-            final_app = self._normalize_app_name(chosen)
+        if likely_app:
+            source_app = self._normalize_app_name(likely_app)
         elif self._last_sampled_app:
-            final_app = self._normalize_app_name(self._last_sampled_app)
+            source_app = self._normalize_app_name(self._last_sampled_app)
         else:
-            final_app = 'Unknown App'
+            source_app = 'Unknown App'
 
         if os.environ.get('CLIP_DEBUG') == '2':
-            print("[clip-debug] %s final_emit app=%s" % (datetime.fromtimestamp(ts).isoformat(), final_app))
+            print("[clip-debug] %s final_emit app=%s" % (datetime.fromtimestamp(ts).isoformat(), source_app))
 
         if os.environ.get('CLIP_DEBUG') == '2':
             try:
                 preview = (text or '')[:200].replace('\n', '\\n')
             except Exception:
                 preview = ''
-            print("[clip-debug] emitting text_preview=\"%s\" app=%s ts=%s" % (preview, final_app, datetime.fromtimestamp(ts).isoformat()))
+            print("[clip-debug] emitting text_preview=\"%s\" app=%s ts=%s" % (preview, source_app, datetime.fromtimestamp(ts).isoformat()))
 
         try:
-            self.clipboard_changed.emit(text, final_app, ts)
+            self.clipboard_changed.emit(text, source_app, ts)
         except Exception:
             pass
 
@@ -477,10 +463,9 @@ class ClipboardWatcher(QObject):
         self._ignore_until = time.time() + (ms / 1000.0)
 
     def set_text(self, text: str, pause_ms: int = None):
-        """Set clipboard text programmatically and pause capture to avoid self-attribution."""
         try:
-            cb = getattr(self, 'clipboard', None) or QApplication.clipboard()
-            cb.setText(str(text))
+            clipboard = getattr(self, 'clipboard', None) or QApplication.clipboard()
+            clipboard.setText(str(text))
         except Exception:
             pass
         try:

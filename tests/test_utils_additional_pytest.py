@@ -1,6 +1,5 @@
 import types
 import subprocess
-import time
 from clipboard_manager import utils
 
 

@@ -7,9 +7,6 @@ Strip Python comments from .py files in the repository (in-place).
 
 Use with caution; this modifies files in-place. Run tests after running.
 """
-import os
-import io
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent

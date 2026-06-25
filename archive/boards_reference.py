@@ -1,5 +1,5 @@
 import re
-from typing import Optional, List, Dict, Any, Pattern
+from typing import Optional, List, Dict, Any
 from enum import Enum
 
 class Board(Enum):

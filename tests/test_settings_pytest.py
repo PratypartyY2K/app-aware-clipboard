@@ -1,6 +1,4 @@
-import tempfile
 import os
-import json
 from clipboard_manager import settings
 
 def test_load_defaults_and_save(tmp_path):

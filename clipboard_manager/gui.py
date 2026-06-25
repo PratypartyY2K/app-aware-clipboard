@@ -238,7 +238,6 @@ class MainWindow(QMainWindow):
                 pass
             self.update_list()
             try:
-                from PyQt6.QtWidgets import QListWidgetItem
                 for i in range(self.list_widget.count()):
                     lw = self.list_widget.item(i)
                     try:

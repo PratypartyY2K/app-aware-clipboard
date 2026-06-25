@@ -1,6 +1,5 @@
 import pytest
 from PyQt6.QtWidgets import QApplication, QMenu
-from PyQt6.QtCore import QPoint
 from clipboard_manager.gui import MainWindow
 
 pytestmark = pytest.mark.gui

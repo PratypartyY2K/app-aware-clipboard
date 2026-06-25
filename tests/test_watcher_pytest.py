@@ -1,8 +1,5 @@
-import time
 from PyQt6.QtWidgets import QApplication
 from clipboard_manager.watcher import ClipboardWatcher
-from clipboard_manager.utils import get_frontmost_app
-import pytest
 
 
 def test_watcher_signal(monkeypatch, qtbot):

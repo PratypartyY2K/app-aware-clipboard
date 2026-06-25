@@ -26,38 +26,34 @@ _save_timer = None
 
 
 def get_config_dir(app_name: str = "CopyPasteTool") -> Path:
-    """Return a platform-appropriate config directory path."""
     if os.name == "nt":
         base = os.getenv("APPDATA", str(Path.home() / "AppData" / "Roaming"))
     else:
         base = os.getenv("XDG_CONFIG_HOME", str(Path.home() / ".config"))
-    p = Path(base) / app_name
-    p.mkdir(parents=True, exist_ok=True)
-    return p
+    config_dir = Path(base) / app_name
+    config_dir.mkdir(parents=True, exist_ok=True)
+    return config_dir
 
 
 def get_config_path(app_name: str = "CopyPasteTool") -> Path:
     return get_config_dir(app_name) / "settings.json"
 
 
-def _do_save(path: Path):
-    tmp = path.with_suffix(".tmp")
+def _write_settings_file(path: Path) -> None:
+    tmp_path = path.with_suffix(".tmp")
     try:
-        with tmp.open("w", encoding="utf-8") as f:
-            json.dump(_settings or DEFAULTS, f, indent=2, ensure_ascii=False)
-        tmp.replace(path)
+        with tmp_path.open("w", encoding="utf-8") as handle:
+            json.dump(_settings or DEFAULTS, handle, indent=2, ensure_ascii=False)
+        tmp_path.replace(path)
     except Exception:
         pass
 
 
 def save_settings(app_name: str = "CopyPasteTool") -> None:
-    """Immediately write settings to disk."""
-    path = get_config_path(app_name)
-    _do_save(path)
+    _write_settings_file(get_config_path(app_name))
 
 
 def save_debounced(delay: float = 0.5, app_name: str = "CopyPasteTool") -> None:
-    """Schedule a debounced save after `delay` seconds. Multiple calls reset the timer."""
     global _save_timer
     try:
         if _save_timer is not None:
@@ -67,7 +63,7 @@ def save_debounced(delay: float = 0.5, app_name: str = "CopyPasteTool") -> None:
                 pass
         path = get_config_path(app_name)
         import threading
-        _save_timer = threading.Timer(delay, _do_save, args=(path,))
+        _save_timer = threading.Timer(delay, _write_settings_file, args=(path,))
         _save_timer.daemon = True
         _save_timer.start()
     except Exception:
@@ -101,19 +97,19 @@ def unregister_callback(cb: Callable[[str, Any], None]) -> None:
 
 def load_settings(app_name: str = "CopyPasteTool") -> Dict[str, Any]:
     global _settings
-    cfg = DEFAULTS.copy()
+    merged_settings = DEFAULTS.copy()
     path = get_config_path(app_name)
     if path.exists():
         try:
-            with path.open("r", encoding="utf-8") as f:
-                loaded = json.load(f)
+            with path.open("r", encoding="utf-8") as handle:
+                loaded = json.load(handle)
             if isinstance(loaded, dict):
-                cfg.update(loaded)
+                merged_settings.update(loaded)
         except Exception:
             try:
-                backup = path.with_suffix('.broken.json')
-                path.replace(backup)
+                broken_copy = path.with_suffix('.broken.json')
+                path.replace(broken_copy)
             except Exception:
                 pass
-    _settings = cfg
+    _settings = merged_settings
     return _settings

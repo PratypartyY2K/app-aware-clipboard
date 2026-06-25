@@ -59,73 +59,70 @@ class HistoryStore:
             pass
 
     def _load_from_persistence(self):
-        data = self._persistence.load_settings()
-        if data.get('secret_safe_enabled') in ('0', 'False', 'false', None):
+        persisted_settings = self._persistence.load_settings()
+        if persisted_settings.get('secret_safe_enabled') in ('0', 'False', 'false', None):
             self.secret_safe_enabled = False
-        elif data.get('secret_safe_enabled') in ('1', 'True', 'true'):
+        elif persisted_settings.get('secret_safe_enabled') in ('1', 'True', 'true'):
             self.secret_safe_enabled = True
-        bl = data.get('blocklist_apps')
-        if bl:
+        persisted_blocklist = persisted_settings.get('blocklist_apps')
+        if persisted_blocklist:
             try:
-                self.blocklist_apps = set(x.strip().lower() for x in bl.split('\n') if x.strip())
+                self.blocklist_apps = set(entry.strip().lower() for entry in persisted_blocklist.split('\n') if entry.strip())
             except Exception:
                 pass
 
-        items = self._persistence.load_items()
-        for r in items:
+        persisted_items = self._persistence.load_items()
+        for row in persisted_items:
             try:
-                stored_app = r.get('source_app') or 'Unknown App'
-                item = ClipboardItem(r['content'], source_app=self._normalize_source_app(stored_app))
-                item.id = r.get('id') or item.id
+                stored_app = row.get('source_app') or 'Unknown App'
+                item = ClipboardItem(row['content'], source_app=self._normalize_source_app(stored_app))
+                item.id = row.get('id') or item.id
                 try:
-                    item.timestamp = datetime.fromisoformat(r.get('timestamp'))
+                    item.timestamp = datetime.fromisoformat(row.get('timestamp'))
                 except Exception:
                     pass
                 try:
-                    stored_board = r.get('board')
+                    stored_board = row.get('board')
                     item._legacy_board = stored_board if stored_board else None
                 except Exception:
                     item._legacy_board = None
                 item.board = None
-                item.is_temporary = bool(r.get('is_temporary'))
-                item.expire_at = r.get('expire_at')
-                item.pinned = bool(r.get('pinned'))
+                item.is_temporary = bool(row.get('is_temporary'))
+                item.expire_at = row.get('expire_at')
+                item.pinned = bool(row.get('pinned'))
                 self.items.append(item)
                 self._items_by_id[item.id] = item
             except Exception:
                 pass
 
-    def add_change_listener(self, cb):
-        if not callable(cb):
+    def add_change_listener(self, listener):
+        if not callable(listener):
             return
         with self._lock:
-            if cb not in self._change_listeners:
-                self._change_listeners.append(cb)
+            if listener not in self._change_listeners:
+                self._change_listeners.append(listener)
 
-    def remove_change_listener(self, cb):
+    def remove_change_listener(self, listener):
         with self._lock:
             try:
-                self._change_listeners.remove(cb)
+                self._change_listeners.remove(listener)
             except ValueError:
                 pass
 
     def _notify_change(self):
-        listeners = []
         with self._lock:
             listeners = list(self._change_listeners)
-        for cb in listeners:
+        for listener in listeners:
             try:
-                cb()
+                listener()
             except Exception:
                 pass
 
     def get_blocklist(self):
-        """Return a sorted list copy of configured blocklist substrings."""
         with self._lock:
             return sorted(self.blocklist_apps)
 
     def set_blocklist(self, entries):
-        """Replace blocklist with an iterable of strings."""
         with self._lock:
             self.blocklist_apps = set(e.strip().lower() for e in entries if e and e.strip())
         if self._persistence:
@@ -174,21 +171,22 @@ class HistoryStore:
             removed = False
             with self._lock:
                 new_items = []
-                for it in self.items:
-                    if getattr(it, 'is_temporary', False) and getattr(it, 'expire_at', None) is not None:
-                        if now >= it.expire_at:
+                # Rebuild once so expiry cleanup does not mutate the active list while iterating.
+                for item in self.items:
+                    if getattr(item, 'is_temporary', False) and getattr(item, 'expire_at', None) is not None:
+                        if now >= item.expire_at:
                             try:
-                                del self._items_by_id[it.id]
+                                del self._items_by_id[item.id]
                             except Exception:
                                 pass
                             if self._persistence:
                                 try:
-                                    self._persistence.delete_item(it.id)
+                                    self._persistence.delete_item(item.id)
                                 except Exception:
                                     pass
                             removed = True
                             continue
-                    new_items.append(it)
+                    new_items.append(item)
                 if removed:
                     self.items = new_items
             if removed:
@@ -202,12 +200,8 @@ class HistoryStore:
     def _looks_like_token(self, text: str) -> bool:
         if not text:
             return False
-        t = text.strip()
-        if _JWT_RE.match(t):
-            return True
-        if _LONG_BASE64_RE.match(t):
-            return True
-        return False
+        stripped = text.strip()
+        return bool(_JWT_RE.match(stripped) or _LONG_BASE64_RE.match(stripped))
 
     def _is_blocked_app(self, app_name: str) -> bool:
         if not app_name:
@@ -220,11 +214,11 @@ class HistoryStore:
                 return True
         return False
 
-    def _first_non_pinned_index(self):
-        idx = 0
-        while idx < len(self.items) and getattr(self.items[idx], 'pinned', False):
-            idx += 1
-        return idx
+    def _first_unpinned_index(self):
+        insert_at = 0
+        while insert_at < len(self.items) and getattr(self.items[insert_at], 'pinned', False):
+            insert_at += 1
+        return insert_at
 
     def add_item(self, content, source_app="Unknown App", timestamp=None):
         if not content:
@@ -242,32 +236,32 @@ class HistoryStore:
 
         source_app = self._normalize_source_app(source_app)
 
-        h = hashlib.sha256(content.encode('utf-8')).hexdigest()
+        content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
         now = time.time()
 
         with self._lock:
-            if h in self._recent_hashes:
-                for it in self.items:
-                    if it.content == content and it.source_app == source_app:
+            if content_hash in self._recent_hashes:
+                for existing_item in self.items:
+                    if existing_item.content == content and existing_item.source_app == source_app:
                         try:
-                            self._recent_hashes.move_to_end(h, last=False)
+                            self._recent_hashes.move_to_end(content_hash, last=False)
                         except Exception:
                             pass
                         if int(os.environ.get('CLIP_DEBUG', '0') or '0') >= 2:
                             print('[clip-debug] history.add_item: deduped per-app app=%s' % (source_app,))
-                        return it
+                        return existing_item
                 if int(os.environ.get('CLIP_DEBUG', '0') or '0') >= 2:
                     print('[clip-debug] history.add_item: seen content global but no per-app match; will add new item (app=%s)' % (source_app,))
 
-            last_seen = self._last_seen_by_app.get((source_app, h))
+            last_seen = self._last_seen_by_app.get((source_app, content_hash))
             if last_seen is not None and (now - last_seen) <= APP_DEDUPE_SECONDS:
-                for it in self.items:
-                    if it.content == content and it.source_app == source_app:
-                        self._last_seen_by_app[(source_app, h)] = now
+                for existing_item in self.items:
+                    if existing_item.content == content and existing_item.source_app == source_app:
+                        self._last_seen_by_app[(source_app, content_hash)] = now
                         if int(os.environ.get('CLIP_DEBUG', '0') or '0') >= 2:
                             print('[clip-debug] history.add_item: suppressed duplicate within APP_DEDUPE_SECONDS for app=%s' % (source_app,))
-                        return it
-                self._last_seen_by_app[(source_app, h)] = now
+                        return existing_item
+                self._last_seen_by_app[(source_app, content_hash)] = now
                 if int(os.environ.get('CLIP_DEBUG', '0') or '0') >= 2:
                     print('[clip-debug] history.add_item: recent same-app copy seen (no existing item), will add new item for app=%s' % (source_app,))
 
@@ -286,23 +280,23 @@ class HistoryStore:
                 except Exception:
                     pass
 
-            idx = self._first_non_pinned_index()
-            self.items.insert(idx, item)
+            insert_at = self._first_unpinned_index()
+            self.items.insert(insert_at, item)
             try:
                 self._items_by_id[item.id] = item
             except Exception:
                 pass
 
             try:
-                if h in self._recent_hashes:
-                    del self._recent_hashes[h]
-                self._recent_hashes[h] = now
+                if content_hash in self._recent_hashes:
+                    del self._recent_hashes[content_hash]
+                self._recent_hashes[content_hash] = now
                 while len(self._recent_hashes) > MAX_RECENT_HASHES:
                     self._recent_hashes.popitem(last=False)
             except Exception:
                 pass
 
-            self._last_seen_by_app[(source_app, h)] = now
+            self._last_seen_by_app[(source_app, content_hash)] = now
 
             if is_temp:
                 self._start_cleanup_thread()
@@ -338,8 +332,8 @@ class HistoryStore:
             item.pinned = True
             try:
                 self.items = [i for i in self.items if i.id != item_id]
-                idx = self._first_non_pinned_index()
-                self.items.insert(idx, item)
+                insert_at = self._first_unpinned_index()
+                self.items.insert(insert_at, item)
                 if self._persistence:
                     try:
                         self._persistence.update_item(item)
@@ -358,10 +352,10 @@ class HistoryStore:
             item.pinned = False
             try:
                 self.items = [i for i in self.items if i.id != item_id]
-                idx = self._first_non_pinned_index()
-                while idx < len(self.items) and self.items[idx].timestamp > item.timestamp:
-                    idx += 1
-                self.items.insert(idx, item)
+                insert_at = self._first_unpinned_index()
+                while insert_at < len(self.items) and self.items[insert_at].timestamp > item.timestamp:
+                    insert_at += 1
+                self.items.insert(insert_at, item)
                 if self._persistence:
                     try:
                         self._persistence.update_item(item)

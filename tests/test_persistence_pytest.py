@@ -1,5 +1,4 @@
 import os
-import tempfile
 from clipboard_manager.storage import Persistence
 from clipboard_manager.history import History
 

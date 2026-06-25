@@ -4,7 +4,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from PyQt6.QtWidgets import QApplication
 from clipboard_manager.watcher import ClipboardWatcher
 from clipboard_manager.history import History
-import time
 
 
 def main():
