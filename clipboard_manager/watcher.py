@@ -399,8 +399,8 @@ class ClipboardWatcher(QObject):
             if candidates:
                 def type_weight(app_name):
                     name_lower = app_name.lower()
-                    # Browsers tend to be the real source for copied links and snippets, so
-                    # we bias them slightly when multiple focus events land in the same window.
+                    # When several focus changes fall into the same capture window, bias toward
+                    # browsers because copied links and snippets usually originate there.
                     if any(name in name_lower for name in ('brave', 'chrome', 'safari', 'firefox', 'edge', 'opera')):
                         return 0.6
                     if any(name in name_lower for name in ('pycharm', 'intellij', 'vscode', 'visual studio code', 'sublime', 'atom', 'webstorm')):

@@ -129,7 +129,7 @@ def _get_app_from_mouse_window() -> Optional[str]:
 
 
 def find_window_owner_by_content(snippet: str) -> Optional[str]:
-    """Search visible windows for titles containing snippet and return owner name."""
+    """Best-effort lookup for a visible window title containing the snippet."""
     try:
         if not snippet:
             return None
@@ -322,9 +322,7 @@ def get_frontmost_app(content_snippet: Optional[str] = None) -> str:
 
 
 def get_top_window_owners(n: int = 10) -> List[str]:
-    """Return a list of top visible window owner names (front-to-back), up to n entries.
-    Returns empty list if pyobjc/Quartz not available.
-    """
+    """Return visible window owners from front to back, up to ``n`` entries."""
     out = []
     try:
         if not _has_pyobjc:
@@ -348,9 +346,7 @@ def get_top_window_owners(n: int = 10) -> List[str]:
 
 
 def probe_frontmost_methods(content_snippet: Optional[str] = None) -> dict:
-    """Return a dictionary with outputs from multiple frontmost-app probes for debugging.
-    Keys: osascript_single, osascript_samples, appkit, ax, mouse_window_owner, by_content
-    """
+    """Collect raw attribution probe outputs for debugging."""
     result = {}
     try:
         res = subprocess.run(
@@ -483,9 +479,7 @@ def highlight_match(text: str, query: str) -> str:
 
 
 def timeline_probes(duration_sec: float = 3.0, interval_sec: float = 0.05) -> List[dict]:
-    """Sample multiple frontmost-app probes over duration, returning a list of timestamped dicts.
-    Each dict contains: ts, appkit, ax, osascript, mouse_window_owner
-    """
+    """Sample attribution probes over time and return timestamped snapshots."""
     out = []
     end = time.time() + float(duration_sec)
     while time.time() < end:
